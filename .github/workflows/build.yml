@@ -1,0 +1,65 @@
+name: Build PowerMon
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [ created ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build — Windows x64 (MSVC 2022)
+    runs-on: windows-latest
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Setup MSVC via Developer Command Prompt ───────────
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # ── 3. Configure CMake ───────────────────────────────────
+      - name: Configure CMake (Release)
+        run: |
+          cmake -B build -G "NMake Makefiles" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_CONFIGURATION_TYPES=Release
+
+      # ── 4. Build ─────────────────────────────────────────────
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      # ── 5. Vérifier l'exe ────────────────────────────────────
+      - name: Check output
+        run: |
+          if (Test-Path "build/powermon.exe") {
+            $size = (Get-Item "build/powermon.exe").length / 1KB
+            Write-Host "✅ powermon.exe généré — ${size} KB"
+          } else {
+            Write-Error "❌ powermon.exe introuvable !"
+            exit 1
+          }
+
+      # ── 6. Upload artifact CI ────────────────────────────────
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: powermon-windows-x64
+          path: build/powermon.exe
+          retention-days: 30
+
+      # ── 7. Publier dans une Release GitHub ───────────────────
+      - name: Upload to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/powermon.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
